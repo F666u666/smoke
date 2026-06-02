@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0f1115" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="本数" />
+<title>本数カウンター</title>
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="apple-touch-icon" href="apple-touch-icon.png" />
+<link rel="icon" href="icon-192.png" />
+<style>
+  :root {
+    --bg: #fafafa;
+    --surface: #ffffff;
+    --line: #ececec;
+    --text: #1a1a1a;
+    --muted: #8a8f98;
+    --accent: #0f9d6b;
+    --accent-soft: #e7f5ef;
+    --warn: #c2410c;
+    --radius: 16px;
+    --radius-sm: 12px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1115;
+      --surface: #181b21;
+      --line: #262a32;
+      --text: #f2f3f5;
+      --muted: #8a8f98;
+      --accent: #2dd4a7;
+      --accent-soft: #16241f;
+      --warn: #fb923c;
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+    padding: env(safe-area-inset-top) 0 calc(env(safe-area-inset-bottom) + 88px);
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 480px; margin: 0 auto; padding: 20px 18px 0; }
+
+  header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 22px; }
+  header h1 { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
+  header .date { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  /* ---- today hero ---- */
+  .hero { text-align: center; padding: 8px 0 4px; }
+  .hero .label { font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+  .hero .count {
+    font-size: 88px; font-weight: 700; line-height: 1; letter-spacing: -0.04em;
+    font-variant-numeric: tabular-nums;
+  }
+  .hero .count span { font-size: 26px; font-weight: 500; color: var(--muted); margin-left: 4px; }
+
+  .tap {
+    display: block; width: 100%; margin: 22px 0 12px;
+    background: var(--accent); color: #fff; border: none;
+    border-radius: 999px; padding: 20px; font-size: 19px; font-weight: 700;
+    cursor: pointer; transition: transform .08s ease, filter .15s ease;
+    box-shadow: 0 8px 24px rgba(15,157,107,.28);
+  }
+  .tap:active { transform: scale(.975); filter: brightness(.97); }
+  .undo {
+    display: block; width: 100%; background: none; border: none;
+    color: var(--muted); font-size: 13px; padding: 6px; cursor: pointer;
+  }
+  .undo:disabled { opacity: .35; cursor: default; }
+
+  /* ---- stat row ---- */
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 18px 0; }
+  .stat {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 14px 16px;
+  }
+  .stat .k { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  .stat .v { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+  .stat .v small { font-size: 13px; font-weight: 500; color: var(--muted); }
+  .delta-down { color: var(--accent); }
+  .delta-up { color: var(--warn); }
+
+  /* ---- section ---- */
+  section { margin: 24px 0; }
+  .sec-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px; }
+  .sec-head h2 { font-size: 15px; font-weight: 600; }
+  .sec-head .note { font-size: 12px; color: var(--muted); }
+
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; }
+
+  /* ---- chart ---- */
+  .chart-wrap { padding: 8px 4px 0; }
+  svg { display: block; width: 100%; height: auto; overflow: visible; }
+  .legend { display: flex; gap: 16px; font-size: 12px; color: var(--muted); margin-top: 10px; padding: 0 4px; }
+  .legend i { display: inline-block; width: 18px; height: 2px; vertical-align: middle; margin-right: 5px; border-radius: 2px; }
+
+  /* ---- savings ---- */
+  .save-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .save-grid .stat .v { color: var(--accent); }
+
+  /* ---- status rows (pace & cost) ---- */
+  #status .row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 13px 0; border-top: 1px solid var(--line); }
+  #status .row:first-child { border-top: none; padding-top: 2px; }
+  #status .row:last-child { padding-bottom: 2px; }
+  .rk { font-size: 13px; color: var(--muted); flex-shrink: 0; }
+  .rk small { font-size: 11px; }
+  .rv { font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; letter-spacing: -0.01em; }
+  .rv small { font-size: 13px; font-weight: 500; color: var(--muted); }
+  .rv .seg { white-space: nowrap; }
+  .rv .seg.sub { font-size: 13px; font-weight: 500; color: var(--muted); }
+  .trend { font-size: 12px; font-weight: 700; margin-left: 6px; white-space: nowrap; }
+  .trend.down { color: var(--accent); }
+  .trend.up { color: var(--warn); }
+  .trend.flat { color: var(--muted); }
+
+  /* ---- streak ---- */
+  .streak { text-align: center; font-size: 13px; color: var(--muted); margin: 14px 0 0; min-height: 18px; }
+  .streak b { color: var(--accent); font-size: 16px; font-weight: 700; }
+  .streak .best { color: var(--muted); margin-left: 12px; }
+
+  /* ---- log list ---- */
+  .log-list { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip {
+    font-size: 13px; font-variant-numeric: tabular-nums; font-family: inherit;
+    background: var(--bg); border: 1px solid var(--line);
+    border-radius: 999px; padding: 5px 10px 5px 12px; color: var(--text);
+    cursor: pointer; display: inline-flex; align-items: center; gap: 7px;
+    transition: transform .08s ease;
+  }
+  .chip:active { transform: scale(.95); }
+  .chip .x { color: var(--muted); font-size: 15px; line-height: 1; }
+  .empty { font-size: 14px; color: var(--muted); padding: 4px 0; }
+
+  .add-row { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+  .add-toggle { background: none; border: none; color: var(--accent); font-size: 13px; font-weight: 600; cursor: pointer; padding: 0; font-family: inherit; }
+  .add-form { display: flex; gap: 8px; margin-top: 12px; }
+  .add-form input {
+    flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: var(--radius-sm);
+    padding: 8px 10px; background: var(--bg); color: var(--text); font-size: 14px; font-family: inherit;
+  }
+  .add-form input:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: transparent; }
+  .add-form button {
+    background: var(--accent); color: #fff; border: none; border-radius: var(--radius-sm);
+    padding: 8px 18px; font-size: 14px; font-weight: 700; cursor: pointer; font-family: inherit; white-space: nowrap;
+  }
+
+  /* ---- settings ---- */
+  .settings { margin-top: 8px; }
+  .settings summary {
+    list-style: none; cursor: pointer; font-size: 14px; color: var(--muted);
+    padding: 12px 0; display: flex; align-items: center; gap: 6px;
+  }
+  .settings summary::-webkit-details-marker { display: none; }
+  .settings[open] summary { color: var(--text); }
+  .field { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-top: 1px solid var(--line); }
+  .field label { font-size: 14px; }
+  .field input {
+    width: 110px; text-align: right; font-size: 15px; font-variant-numeric: tabular-nums;
+    border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 8px 10px;
+    background: var(--bg); color: var(--text);
+  }
+  .field input:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: transparent; }
+  .field .unit { font-size: 13px; color: var(--muted); margin-left: 8px; }
+  .danger { color: var(--warn); background: none; border: none; font-size: 13px; padding: 12px 0 0; cursor: pointer; }
+
+  /* ---- bulk add ---- */
+  .bulk-form { display: flex; flex-direction: column; gap: 10px; }
+  .bulk-row { display: flex; gap: 8px; }
+  .bulk-form input {
+    border: 1px solid var(--line); border-radius: var(--radius-sm);
+    padding: 9px 11px; background: var(--bg); color: var(--text); font-size: 15px; font-family: inherit;
+  }
+  .bulk-form input[type="date"] { width: 100%; }
+  .bulk-form input[type="number"] { flex: 1; min-width: 0; text-align: right; font-variant-numeric: tabular-nums; }
+  .bulk-form input:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: transparent; }
+  .bulk-form button {
+    background: var(--accent); color: #fff; border: none; border-radius: var(--radius-sm);
+    padding: 9px 22px; font-size: 15px; font-weight: 700; cursor: pointer; font-family: inherit; white-space: nowrap;
+  }
+  .bulk-note { font-size: 12px; color: var(--muted); margin-top: 11px; line-height: 1.5; }
+
+  /* ---- tabs ---- */
+  .tab-panel[hidden] { display: none; }
+  .tab-panel { animation: fade .2s ease; }
+  @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) { .tab-panel { animation: none; } }
+
+  /* home stat lines (icon + label + value) */
+  .home-stats { margin: 26px auto 0; max-width: 320px; display: grid; gap: 16px; }
+  .home-stat { display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 17px; }
+  .home-stat .hk { color: var(--muted); }
+  .home-stat .hv { font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+  .home-stat svg { width: 22px; height: 22px; color: var(--muted); flex-shrink: 0; }
+
+  /* history */
+  .hist-row { display: flex; align-items: center; justify-content: space-between; padding: 13px 0; border-top: 1px solid var(--line); }
+  .hist-row:first-child { border-top: none; }
+  .hist-date { font-size: 14px; }
+  .hist-date .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 9px; vertical-align: middle; }
+  .hist-date .dot.ok { background: var(--accent); }
+  .hist-date .dot.over { background: var(--warn); }
+  .hist-val { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .hist-val small { font-size: 12px; font-weight: 500; color: var(--muted); margin-left: 6px; }
+
+  /* ---- bottom tab bar ---- */
+  .tabbar {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
+    background: var(--surface); border-top: 1px solid var(--line);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .tabbar-inner { max-width: 480px; margin: 0 auto; display: flex; }
+  .tabbtn {
+    flex: 1; background: none; border: none; cursor: pointer; font-family: inherit;
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    padding: 9px 0 7px; color: var(--muted); font-size: 11px; font-weight: 600;
+    transition: color .15s ease;
+  }
+  .tabbtn svg { width: 25px; height: 25px; }
+  .tabbtn.active { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1 id="page-title">今日の記録</h1>
+    <span class="date" id="today-date"></span>
+  </header>
+
+  <!-- ===== 今日 ===== -->
+  <section class="tab-panel" data-tab="today">
+    <div class="hero">
+      <div class="label">今日の本数</div>
+      <div class="count"><span id="today-count">0</span><span>本</span></div>
+    </div>
+
+    <div class="streak" id="streak"></div>
+
+    <div class="home-stats">
+      <div class="home-stat">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="14" width="15" height="4" rx="1"/><path d="M13 14v4"/><path d="M20 14v4"/><path d="M7 10c0-1.2 1.3-1.4 1.3-2.6"/></svg>
+        <span class="hk">今日の出費</span><span class="hv" id="today-cost">¥0</span>
+      </div>
+      <div class="home-stat">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="14" r="7"/><path d="M12 14l3-2"/><path d="M9 3h6"/><path d="M12 3v2.5"/></svg>
+        <span class="hk">最後の1本から</span><span class="hv" id="elapsed-live">—</span>
+      </div>
+    </div>
+
+    <button class="tap" id="tap-btn">＋ 1本吸った</button>
+    <button class="undo" id="undo-btn" disabled>直前の1本を取り消す</button>
+  </section>
+
+  <!-- ===== 分析 ===== -->
+  <section class="tab-panel" data-tab="analysis" hidden>
+    <div class="stats">
+      <div class="stat">
+        <div class="k">前日比</div>
+        <div class="v" id="delta">—</div>
+      </div>
+      <div class="stat">
+        <div class="k">今日の本数</div>
+        <div class="v" id="analysis-count">0<small> 本</small></div>
+      </div>
+    </div>
+
+    <section>
+      <div class="sec-head">
+        <h2>本数の推移</h2>
+        <span class="note">直近14日</span>
+      </div>
+      <div class="card chart-wrap">
+        <div id="chart"></div>
+        <div class="legend">
+          <span><i style="background:var(--accent)"></i>1日の本数</span>
+          <span><i style="background:var(--muted)"></i>元の本数</span>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><h2>ペースとコスト</h2></div>
+      <div class="card" id="status"></div>
+    </section>
+
+    <section>
+      <div class="sec-head">
+        <h2>節約</h2>
+        <span class="note" id="save-note"></span>
+      </div>
+      <div class="save-grid">
+        <div class="stat">
+          <div class="k">これまでに浮いたお金</div>
+          <div class="v" id="saved-total">¥0</div>
+        </div>
+        <div class="stat">
+          <div class="k">今のペースだと1ヶ月</div>
+          <div class="v" id="month-cost">¥0</div>
+        </div>
+      </div>
+    </section>
+  </section>
+
+  <!-- ===== 履歴 ===== -->
+  <section class="tab-panel" data-tab="history" hidden>
+    <section>
+      <div class="sec-head">
+        <h2>今日の記録</h2>
+        <span class="note" id="log-count"></span>
+      </div>
+      <div class="card">
+        <div class="log-list" id="log-list"></div>
+        <div class="add-row">
+          <button class="add-toggle" id="add-toggle">＋ 時刻を指定して追加</button>
+          <div class="add-form" id="add-form" hidden>
+            <input type="datetime-local" id="add-time" />
+            <button id="add-confirm">追加</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head">
+        <h2>まとめて追加</h2>
+        <span class="note">過去ぶんを一括登録</span>
+      </div>
+      <div class="card">
+        <div class="bulk-form">
+          <input type="date" id="bulk-date" aria-label="日付" />
+          <div class="bulk-row">
+            <input type="number" id="bulk-count" inputmode="numeric" min="1" placeholder="本数" aria-label="本数" />
+            <button id="bulk-confirm">追加</button>
+          </div>
+        </div>
+        <p class="bulk-note">時刻は分からなくてOK。日中（9〜23時）に自動でならして記録します。</p>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head">
+        <h2>過去の記録</h2>
+        <span class="note">目標 <span id="hist-goal">10</span>本以下</span>
+      </div>
+      <div class="card" id="history-list"></div>
+    </section>
+  </section>
+
+  <!-- ===== 設定 ===== -->
+  <section class="tab-panel" data-tab="settings" hidden>
+    <div class="card">
+      <div class="field">
+        <label for="price">1箱の値段</label>
+        <div><input id="price" type="number" inputmode="numeric" min="0" /><span class="unit">円</span></div>
+      </div>
+      <div class="field">
+        <label for="perbox">1箱の本数</label>
+        <div><input id="perbox" type="number" inputmode="numeric" min="1" /><span class="unit">本</span></div>
+      </div>
+      <div class="field">
+        <label for="baseline">元の本数（1日）</label>
+        <div><input id="baseline" type="number" inputmode="numeric" min="0" /><span class="unit">本</span></div>
+      </div>
+      <div class="field">
+        <label for="goal">1日の目標</label>
+        <div><input id="goal" type="number" inputmode="numeric" min="0" /><span class="unit">本以下</span></div>
+      </div>
+      <button class="danger" id="reset-btn">すべての記録を消す</button>
+    </div>
+  </section>
+
+  <nav class="tabbar">
+    <div class="tabbar-inner">
+      <button class="tabbtn active" data-go="today" aria-label="今日">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="14" width="15" height="4" rx="1"/><path d="M13 14v4"/><path d="M20 14v4"/><path d="M7 10c0-1.2 1.3-1.4 1.3-2.6"/></svg>
+        今日
+      </button>
+      <button class="tabbtn" data-go="analysis" aria-label="分析">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V11"/><path d="M12 21V4"/><path d="M19 21v-6"/></svg>
+        分析
+      </button>
+      <button class="tabbtn" data-go="history" aria-label="履歴">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18"/><path d="M8 3v4"/><path d="M16 3v4"/></svg>
+        履歴
+      </button>
+      <button class="tabbtn" data-go="settings" aria-label="設定">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h16"/><path d="M4 16h16"/><circle cx="9" cy="8" r="2.6" fill="var(--surface)"/><circle cx="15" cy="16" r="2.6" fill="var(--surface)"/></svg>
+        設定
+      </button>
+    </div>
+  </nav>
+</div>
+
+<script>
+"use strict";
+const LOGS_KEY = "smoke_logs_v1";
+const CFG_KEY  = "smoke_cfg_v1";
+const DAY_MS = 86400000;
+
+const defaultCfg = { price: 600, perbox: 20, baseline: 20, goal: 10 };
+
+function loadLogs() {
+  try { const a = JSON.parse(localStorage.getItem(LOGS_KEY)); return Array.isArray(a) ? a : []; }
+  catch { return []; }
+}
+function saveLogs(a) { localStorage.setItem(LOGS_KEY, JSON.stringify(a)); }
+function loadCfg() {
+  try { return Object.assign({}, defaultCfg, JSON.parse(localStorage.getItem(CFG_KEY)) || {}); }
+  catch { return Object.assign({}, defaultCfg); }
+}
+function saveCfg(c) { localStorage.setItem(CFG_KEY, JSON.stringify(c)); }
+
+let logs = loadLogs();   // array of epoch ms
+let cfg = loadCfg();
+
+const yen = n => "¥" + Math.round(n).toLocaleString("ja-JP");
+const pricePerCig = () => (cfg.perbox > 0 ? cfg.price / cfg.perbox : 0);
+
+// local YYYY-MM-DD key
+function dayKey(ms) {
+  const d = new Date(ms);
+  return d.getFullYear() + "-" + (d.getMonth()+1) + "-" + d.getDate();
+}
+function startOfToday() {
+  const d = new Date(); d.setHours(0,0,0,0); return d.getTime();
+}
+function countOnDay(ms) {
+  const k = dayKey(ms);
+  return logs.filter(t => dayKey(t) === k).length;
+}
+
+// ----- chart (custom SVG) -----
+function buildChart() {
+  const W = 700, H = 260, padL = 8, padR = 8, padT = 14, padB = 26;
+  const days = 14;
+  const today0 = startOfToday();
+  const pts = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const ms = today0 - i * DAY_MS;
+    pts.push({ ms, count: countOnDay(ms) });
+  }
+  const maxVal = Math.max(cfg.baseline, ...pts.map(p => p.count), 1);
+  const yTop = Math.ceil(maxVal * 1.15);
+  const innerW = W - padL - padR;
+  const innerH = H - padT - padB;
+  const x = i => padL + (innerW * i) / (days - 1);
+  const y = v => padT + innerH * (1 - v / yTop);
+
+  const linePts = pts.map((p, i) => x(i) + "," + y(p.count)).join(" ");
+  const areaPts = "0," + (padT+innerH) + " " + pts.map((p,i)=> x(i)+","+y(p.count)).join(" ") + " " + W + "," + (padT+innerH);
+
+  // baseline dashed line
+  const baseY = y(cfg.baseline);
+
+  let dots = "", labels = "";
+  pts.forEach((p, i) => {
+    const isToday = i === days - 1;
+    dots += `<circle cx="${x(i).toFixed(1)}" cy="${y(p.count).toFixed(1)}" r="${isToday?5:3}" fill="${isToday?'var(--accent)':'var(--surface)'}" stroke="var(--accent)" stroke-width="2"/>`;
+    if (i % 2 === days % 2) {
+      const d = new Date(p.ms);
+      labels += `<text x="${x(i).toFixed(1)}" y="${H-6}" text-anchor="middle" font-size="11" fill="var(--muted)">${d.getMonth()+1}/${d.getDate()}</text>`;
+    }
+  });
+
+  const svg = `
+    <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="1日あたりの本数の推移">
+      <defs>
+        <linearGradient id="fill" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.18"/>
+          <stop offset="100%" stop-color="var(--accent)" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+      ${cfg.baseline > 0 ? `<line x1="${padL}" y1="${baseY.toFixed(1)}" x2="${W-padR}" y2="${baseY.toFixed(1)}" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="4 5" opacity="0.7"/>` : ""}
+      <polygon points="${areaPts}" fill="url(#fill)"/>
+      <polyline points="${linePts}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+      ${dots}
+      ${labels}
+    </svg>`;
+  document.getElementById("chart").innerHTML = svg;
+}
+
+// ----- savings -----
+function computeSaved() {
+  // 記録のある日それぞれで (元の本数 - 実本数) のプラス分を合計
+  const byDay = {};
+  logs.forEach(t => { const k = dayKey(t); byDay[k] = (byDay[k]||0)+1; });
+  let savedCigs = 0, days = 0;
+  Object.values(byDay).forEach(c => { days++; savedCigs += Math.max(0, cfg.baseline - c); });
+  return { savedCigs, days, money: savedCigs * pricePerCig() };
+}
+
+// ----- pace & cost (data-driven) -----
+const f1 = n => { const r = Math.round(n * 10) / 10; return Number.isInteger(r) ? String(r) : r.toFixed(1); };
+
+function fmtElapsed(ms) {
+  const m = Math.floor(ms / 60000);
+  if (m < 1) return "たった今";
+  if (m < 60) return m + "分";
+  const h = Math.floor(m / 60), mm = m % 60;
+  if (h < 24) return h + "時間" + (mm > 0 ? mm + "分" : "");
+  const d = Math.floor(h / 24), hh = h % 24;
+  return d + "日" + (hh > 0 ? hh + "時間" : "");
+}
+
+// 直近 span 日（offset 日前から）の「記録した日の1日平均」。記録がなければ null
+function avgPerLoggedDay(offset, span) {
+  const t0 = startOfToday();
+  let total = 0, days = 0;
+  for (let i = offset; i < offset + span; i++) {
+    const c = countOnDay(t0 - i * DAY_MS);
+    if (c > 0) { total += c; days++; }
+  }
+  return days > 0 ? total / days : null;
+}
+
+// 将来コストの基準ペース（直近7日の記録日平均。なければ今日の本数）
+function paceRate() {
+  const r = avgPerLoggedDay(0, 7);
+  return r !== null ? r : countOnDay(Date.now());
+}
+
+function buildStatus() {
+  const el = document.getElementById("status");
+  if (logs.length === 0) {
+    el.innerHTML = `<div class="empty">記録を始めると、ペースと将来かかるお金がここに出ます</div>`;
+    return;
+  }
+  const rate = paceRate();
+  const pc = pricePerCig();
+  const yearCost = rate * pc * 365;
+
+  const recent = avgPerLoggedDay(0, 7);
+  const prev = avgPerLoggedDay(7, 7);
+  let trend = "";
+  if (recent !== null && prev !== null) {
+    const diff = recent - prev;
+    if (Math.abs(diff) < 0.05) trend = `<span class="trend flat">前の7日と同じ</span>`;
+    else if (diff < 0) trend = `<span class="trend down">▼ 1日 ${f1(-diff)}本</span>`;
+    else trend = `<span class="trend up">▲ 1日 ${f1(diff)}本</span>`;
+  }
+
+  el.innerHTML = `
+    <div class="row">
+      <span class="rk">1日あたり<small>（直近7日）</small></span>
+      <span class="rv">${f1(rate)}本 ${trend}</span>
+    </div>
+    <div class="row">
+      <span class="rk">このペースだと</span>
+      <span class="rv"><span class="seg">1年 ${yen(yearCost)}</span><span class="seg sub"> ／ 5年 ${yen(yearCost * 5)}</span></span>
+    </div>`;
+}
+
+// ----- live elapsed timer (home) -----
+function fmtClock(ms) {
+  if (ms < 0) ms = 0;
+  const s = Math.floor(ms / 1000);
+  const hh = String(Math.floor(s / 3600)).padStart(2, "0");
+  const mm = String(Math.floor(s / 60) % 60).padStart(2, "0");
+  const ss = String(s % 60).padStart(2, "0");
+  return `${hh}:${mm}:${ss}`;
+}
+function tickElapsed() {
+  const el = document.getElementById("elapsed-live");
+  if (!el) return;
+  el.textContent = logs.length === 0 ? "—" : fmtClock(Date.now() - Math.max(...logs));
+}
+
+// ----- history (past days) -----
+function renderHistory() {
+  const el = document.getElementById("history-list");
+  document.getElementById("hist-goal").textContent = cfg.goal;
+  const byDay = {};
+  logs.forEach(t => { const k = dayKey(t); (byDay[k] = byDay[k] || []).push(t); });
+  const todayK = dayKey(Date.now());
+  const W = "日月火水木金土";
+  const days = Object.keys(byDay)
+    .filter(k => k !== todayK)
+    .map(k => ({ ts: startOfDay(byDay[k][0]), c: byDay[k].length }))
+    .sort((a, b) => b.ts - a.ts)
+    .slice(0, 31);
+  if (days.length === 0) {
+    el.innerHTML = `<div class="empty">まだ過去の記録がありません</div>`;
+    return;
+  }
+  el.innerHTML = days.map(d => {
+    const dt = new Date(d.ts);
+    const ok = d.c <= cfg.goal;
+    return `<div class="hist-row">
+      <span class="hist-date"><span class="dot ${ok ? "ok" : "over"}"></span>${dt.getMonth()+1}月${dt.getDate()}日(${W[dt.getDay()]})</span>
+      <span class="hist-val">${d.c}本<small>${yen(d.c * pricePerCig())}</small></span>
+    </div>`;
+  }).join("");
+}
+
+// ----- streak (consecutive days at or under the daily goal) -----
+function startOfDay(ms) { const d = new Date(ms); d.setHours(0,0,0,0); return d.getTime(); }
+
+function streakInfo() {
+  if (logs.length === 0) return { cur: 0, best: 0 };
+  const goal = cfg.goal;
+  const t0 = startOfToday();
+  const firstDay = startOfDay(Math.min(...logs));
+  let cur = 0;
+  for (let day = t0; day >= firstDay; day -= DAY_MS) {
+    if (countOnDay(day) <= goal) cur++; else break;
+  }
+  let best = 0, run = 0;
+  for (let day = firstDay; day <= t0; day += DAY_MS) {
+    if (countOnDay(day) <= goal) { run++; if (run > best) best = run; } else run = 0;
+  }
+  return { cur, best };
+}
+
+function buildStreak() {
+  const el = document.getElementById("streak");
+  const goal = cfg.goal;
+  if (logs.length === 0) {
+    el.innerHTML = `目標 ${goal}本以下で連続記録がスタート`;
+    return;
+  }
+  const { cur, best } = streakInfo();
+  if (cur > 0) {
+    el.innerHTML = `<b>${cur}日</b>連続で目標達成<span class="best">最長 ${best}日</span>`;
+  } else {
+    el.innerHTML = `今日は目標オーバー（${countOnDay(Date.now())}本／目標${goal}本）<span class="best">最長 ${best}日</span>`;
+  }
+}
+
+// ----- main render -----
+function render() {
+  const today = new Date();
+  document.getElementById("today-date").textContent =
+    `${today.getMonth()+1}月${today.getDate()}日(${"日月火水木金土"[today.getDay()]})`;
+
+  const todayCount = countOnDay(today.getTime());
+  const yCount = countOnDay(today.getTime() - DAY_MS);
+  const hasYesterday = logs.some(t => dayKey(t) === dayKey(today.getTime() - DAY_MS));
+
+  document.getElementById("today-count").textContent = todayCount;
+  document.getElementById("analysis-count").innerHTML = todayCount + "<small> 本</small>";
+  document.getElementById("today-cost").textContent = yen(todayCount * pricePerCig());
+
+  // delta
+  const dEl = document.getElementById("delta");
+  if (!hasYesterday) {
+    dEl.textContent = "—"; dEl.className = "v";
+  } else {
+    const diff = todayCount - yCount;
+    if (diff === 0) { dEl.textContent = "±0 本"; dEl.className = "v"; }
+    else if (diff < 0) { dEl.innerHTML = `▼ ${Math.abs(diff)} <small>本</small>`; dEl.className = "v delta-down"; }
+    else { dEl.innerHTML = `▲ ${diff} <small>本</small>`; dEl.className = "v delta-up"; }
+  }
+
+  // savings
+  const s = computeSaved();
+  document.getElementById("saved-total").textContent = yen(s.money);
+  document.getElementById("save-note").textContent = s.days > 0 ? `記録${s.days}日ぶん` : "";
+  document.getElementById("month-cost").textContent = yen(paceRate() * pricePerCig() * 30);
+
+  buildStreak();
+  buildStatus();
+  buildChart();
+  renderLog();
+  renderHistory();
+  tickElapsed();
+  document.getElementById("undo-btn").disabled = logs.length === 0;
+}
+
+function renderLog() {
+  const list = document.getElementById("log-list");
+  const todays = logs.filter(t => dayKey(t) === dayKey(Date.now())).sort((a,b)=>a-b);
+  document.getElementById("log-count").textContent = todays.length > 0 ? `${todays.length}本` : "";
+  if (todays.length === 0) {
+    list.innerHTML = `<span class="empty">まだ記録がありません</span>`;
+    return;
+  }
+  list.innerHTML = todays.map(t => {
+    const d = new Date(t);
+    const hh = String(d.getHours()).padStart(2,"0");
+    const mm = String(d.getMinutes()).padStart(2,"0");
+    return `<button class="chip" data-t="${t}">${hh}:${mm}<span class="x" aria-hidden="true">×</span></button>`;
+  }).join("");
+}
+
+// ----- events -----
+document.getElementById("tap-btn").addEventListener("click", () => {
+  logs.push(Date.now());
+  saveLogs(logs);
+  if (navigator.vibrate) navigator.vibrate(12);
+  render();
+});
+
+document.getElementById("undo-btn").addEventListener("click", () => {
+  if (logs.length === 0) return;
+  logs.sort((a,b)=>a-b).pop();
+  saveLogs(logs);
+  render();
+});
+
+// delete a specific record by tapping its chip
+document.getElementById("log-list").addEventListener("click", (e) => {
+  const chip = e.target.closest(".chip");
+  if (!chip) return;
+  const t = Number(chip.dataset.t);
+  const d = new Date(t);
+  const hh = String(d.getHours()).padStart(2,"0"), mm = String(d.getMinutes()).padStart(2,"0");
+  if (confirm(`${hh}:${mm} の記録を消す？`)) {
+    const i = logs.indexOf(t);
+    if (i !== -1) { logs.splice(i, 1); saveLogs(logs); render(); }
+  }
+});
+
+// add a record at a chosen time
+const addForm = document.getElementById("add-form");
+const addTime = document.getElementById("add-time");
+document.getElementById("add-toggle").addEventListener("click", () => {
+  if (addForm.hasAttribute("hidden")) {
+    const n = new Date(); n.setMinutes(n.getMinutes() - n.getTimezoneOffset());
+    addTime.value = n.toISOString().slice(0, 16);
+    addForm.removeAttribute("hidden");
+  } else {
+    addForm.setAttribute("hidden", "");
+  }
+});
+document.getElementById("add-confirm").addEventListener("click", () => {
+  if (!addTime.value) return;
+  const t = new Date(addTime.value).getTime();
+  if (isNaN(t)) return;
+  logs.push(t);
+  saveLogs(logs);
+  addForm.setAttribute("hidden", "");
+  render();
+});
+
+// bulk add: a day's total count, spread across daytime
+const bulkDate = document.getElementById("bulk-date");
+(() => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); bulkDate.value = d.toISOString().slice(0, 10); })();
+document.getElementById("bulk-confirm").addEventListener("click", () => {
+  const n = parseInt(document.getElementById("bulk-count").value, 10);
+  if (!bulkDate.value || !n || n < 1) return;
+  const [Y, M, D] = bulkDate.value.split("-").map(Number);
+  const dayStart = new Date(Y, M - 1, D, 0, 0, 0, 0).getTime();
+  if (dayStart > startOfToday()) { alert("未来の日付は追加できません"); return; }
+  const now = Date.now();
+  const winStart = dayStart + 9 * 3600000;          // 9:00
+  let winEnd = dayStart + 23 * 3600000;             // 23:00
+  if (dayKey(dayStart) === dayKey(now)) winEnd = Math.min(winEnd, now);
+  if (winEnd <= winStart) winEnd = winStart + 60000;
+  const step = (winEnd - winStart) / n;
+  for (let i = 0; i < n; i++) logs.push(Math.round(winStart + step * (i + 0.5)));
+  saveLogs(logs);
+  document.getElementById("bulk-count").value = "";
+  render();
+});
+
+function bindCfgInput(id, key, isInt) {
+  const el = document.getElementById(id);
+  el.value = cfg[key];
+  el.addEventListener("change", () => {
+    let v = parseFloat(el.value);
+    if (isNaN(v) || v < 0) v = defaultCfg[key];
+    if (isInt) v = Math.round(v);
+    cfg[key] = v; el.value = v;
+    saveCfg(cfg); render();
+  });
+}
+bindCfgInput("price", "price", true);
+bindCfgInput("perbox", "perbox", true);
+bindCfgInput("baseline", "baseline", true);
+bindCfgInput("goal", "goal", true);
+
+document.getElementById("reset-btn").addEventListener("click", () => {
+  if (confirm("すべての記録を消します。元に戻せません。")) {
+    logs = []; saveLogs(logs); render();
+  }
+});
+
+// ----- tab navigation -----
+const PAGE_TITLES = { today: "今日の記録", analysis: "分析", history: "履歴", settings: "設定" };
+function goTab(name) {
+  document.querySelectorAll(".tab-panel").forEach(p => { p.hidden = p.dataset.tab !== name; });
+  document.querySelectorAll(".tabbtn").forEach(b => b.classList.toggle("active", b.dataset.go === name));
+  document.getElementById("page-title").textContent = PAGE_TITLES[name];
+  document.getElementById("today-date").style.display = name === "today" ? "" : "none";
+  window.scrollTo(0, 0);
+}
+document.querySelectorAll(".tabbtn").forEach(b => b.addEventListener("click", () => goTab(b.dataset.go)));
+
+// live elapsed timer, ticking every second
+setInterval(tickElapsed, 1000);
+
+// midnight rollover: re-render when the day changes while open
+let lastDay = dayKey(Date.now());
+setInterval(() => {
+  const k = dayKey(Date.now());
+  if (k !== lastDay) { lastDay = k; render(); }
+  else { buildStatus(); }
+}, 30000);
+
+render();
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("sw.js").catch(() => {});
+  });
+}
+</script>
+</body>
+</html>
